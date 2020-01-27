@@ -2,8 +2,7 @@
   "Vega vizualizations of datasets."
   (:require [clojure.data.json :as json]
             [tech.v2.datatype :as dtype]
-            [tech.v2.tensor.color-gradients :as gradient]
-            [tech.ml.dataset :as ds]))
+            [tech.v2.tensor.color-gradients :as gradient]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Functions for generating vega JS specs for visualization
@@ -27,57 +26,58 @@
   (merge m {:nice nice :round round :type type :zero zero}))
 
 (defn scatterplot
-  "Render a scatterplot to a vega datastructure"
-  [ds x-col y-col & [options]]
+  "Render a scatterplot to a vega datastructure.  Dataset is a sequence of maps"
+  [mapseq-ds x-key y-key & [options]]
   (base-schema
    options
    :axes [(axis :orient "bottom"
                 :scale "x"
-                :title x-col)
+                :title x-key)
           (axis :orient "left"
                 :scale "y"
-                :title y-col)]
+                :title y-key)]
    :data [{:name "source"
-           :values (ds/mapseq-reader (ds/select-columns ds [x-col y-col]))}]
+           :values (mapv #(select-keys % [x-key y-key]) mapseq-ds)}]
    :marks [{:encode {:update {:fill {:value "#222"}
                               :stroke {:value "#222"}
                               :opacity {:value 0.5}
                               :shape {:value "circle"}
-                              :x {:field x-col :scale "x"}
-                              :y {:field y-col :scale "y"}}}
+                              :x {:field x-key :scale "x"}
+                              :y {:field y-key :scale "y"}}}
             :from {:data "source"}
             :type "symbol"}]
-   :scales [(scale :domain {:data "source" :field x-col}
+   :scales [(scale :domain {:data "source" :field x-key}
                    :name "x"
                    :range "width"
                    :zero false)
-            (scale :domain {:data "source" :field y-col}
+            (scale :domain {:data "source" :field y-key}
                    :name "y"
                    :range "height"
                    :zero false)]))
 
 
 (defn scatterplot->str
-  [ds x-col y-col & [options]]
-  (->> (scatterplot ds x-col y-col options)
+  [mapseq-ds x-key y-key & [options]]
+  (->> (scatterplot mapseq-ds x-key y-key options)
        (json/write-str)))
 
 
 (defn histogram
   "Render a histograph to a vega datastructure"
-  [ds col & [{:keys [bin-count] :as options}]]
-  (let [raw-values (ds col)
+  [values label & [{:keys [bin-count gradient-name] :as options
+                    :or {gradient-name :gray-yellow-tones}}]]
+  (let [n-values (count values)
         [minimum maximum] ((juxt #(apply min %)
-                                 #(apply max %)) raw-values)
+                                 #(apply max %)) values)
         bin-count (int (or bin-count
-                           (Math/ceil (Math/log (ds/ds-row-count ds)))))
+                           (Math/ceil (Math/log n-values))))
         bin-width (double (/ (- maximum minimum) bin-count))
         initial-values (->> (for [i (range bin-count)]
                               {:count 0
                                :left (+ minimum (* i bin-width))
                                :right (+ minimum (* (inc i) bin-width))})
                             (vec))
-        values (->> raw-values
+        values (->> values
                     (reduce (fn [eax v]
                               (let [bin-index (min (int (quot (- v minimum)
                                                               bin-width))
@@ -86,7 +86,7 @@
                             initial-values))
         color-tensors (-> (map :count values)
                           (vec)
-                          (gradient/colorize :gray-yellow-tones)
+                          (gradient/colorize gradient-name)
                           (tech.v2.tensor/reshape [bin-count 3]))
         colors (->> color-tensors
                     (map dtype/->vector)
@@ -123,37 +123,39 @@
 
 (defn time-series
   "Render a time series to a vega datastructure"
-  [ds x-col y-col & [options]]
+  [mapseq-ds x-key y-key & [options]]
   (base-schema
    options
    :axes [{:orient "bottom" :scale "x"}
           {:orient "left" :scale "y"}]
    :data [{:name "table"
-           :values (ds/mapseq-reader (ds/select-columns ds [x-col y-col]))}]
+           :values (mapv #(select-keys % [x-key y-key]) mapseq-ds)}]
    :marks [{:encode {:enter {:stroke {:value "#222"}
                              :strokeWidth {:value 2}
-                             :x {:field x-col :scale "x"}
-                             :y {:field y-col :scale "y"}}}
+                             :x {:field x-key :scale "x"}
+                             :y {:field y-key :scale "y"}}}
             :from {:data "table"}
             :type "line"}]
-   :scales [{:domain {:data "table" :field x-col}
+   :scales [{:domain {:data "table" :field x-key}
              :name "x"
              :range "width"
              :type "utc"}
-            (scale :domain {:data "table" :field y-col}
+            (scale :domain {:data "table" :field y-key}
                    :name "y"
                    :range "height")]))
 
 (defn time-series->str
-  [ds x-col y-col & [options]]
-  (->> (time-series ds x-col y-col options)
+  [mapseq-ds x-key y-key & [options]]
+  (->> (time-series mapseq-ds x-key y-key options)
        (json/write-str)))
 
 (comment
 
   (require '[tech.viz.desktop :refer [->clipboard]])
+  (require '[tech.ml.dataset :as ds])
 
   (-> (ds/->dataset "https://data.cityofchicago.org/api/views/pfsx-4n4m/rows.csv?accessType=DOWNLOAD")
+      (ds/->flyweight)
       (scatterplot->str "Longitude" "Total Passing Vehicle Volume")
       (->clipboard))
 
@@ -162,6 +164,7 @@
   (-> (slurp "https://vega.github.io/vega/data/cars.json")
       (clojure.data.json/read-str :key-fn keyword)
       (ds/->dataset)
+      (ds/->flyweight)
       (histogram->str :Displacement {:bin-count 15})
       (->clipboard))
 
@@ -170,6 +173,7 @@
         sdf (java.text.SimpleDateFormat. "MMM dd yyyy")
         utc-ms (map #(.getTime (.parse sdf %)) (ds "date"))]
     (-> (ds/new-column ds "inst" utc-ms {:datatype :int64})
+        (ds/->flyweight)
         (time-series->str "inst" "price")
         (->clipboard)))
 
@@ -178,6 +182,7 @@
         sdf (java.text.SimpleDateFormat. "yyyy/MM/dd HH:mm")
         utc-ms (map #(.getTime (.parse sdf %)) (ds "date"))]
     (-> (ds/new-column ds "inst" utc-ms {:datatype :int64})
+        (ds/->flyweight)
         (time-series->str "inst" "temp")
         (->clipboard)))
 
