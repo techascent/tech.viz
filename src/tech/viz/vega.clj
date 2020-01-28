@@ -115,6 +115,7 @@
                      :range "height"
                      :name "yscale")])))
 
+
 (defn histogram->str
   ([ds col & [options]]
    (-> (histogram ds col options)
@@ -144,10 +145,84 @@
                    :name "y"
                    :range "height")]))
 
+
 (defn time-series->str
   [mapseq-ds x-key y-key & [options]]
   (->> (time-series mapseq-ds x-key y-key options)
        (json/write-str)))
+
+(defn bar-chart
+  [bar-ds & [options]]
+  (base-schema
+   options))
+
+;; {
+;;   "$schema": "https://vega.github.io/schema/vega/v5.json",
+;;   "width": 800,
+;;   "height": 450,
+;;   "data": [
+;;     {
+;;       "name": "table",
+;;       "values": [
+;;         {"category": "Long Form", "amount": 28},
+;;         {"category": "B", "amount": 55},
+;;         {"category": "C", "amount": 43},
+;;         {"category": "D", "amount": 91},
+;;         {"category": "E", "amount": 81},
+;;         {"category": "F", "amount": 53},
+;;         {"category": "G", "amount": 19},
+;;         {"category": "H", "amount": 87}
+;;       ]
+;;     }
+;;   ],
+
+;;   "scales": [
+;;     {
+;;       "name": "xscale",
+;;       "type": "band",
+;;       "domain": {"data": "table", "field": "category"},
+;;       "range": "width",
+;;       "padding": 0.05,
+;;       "round": true
+;;     },
+;;     {
+;;       "name": "yscale",
+;;       "domain": {"data": "table", "field": "amount"},
+;;       "nice": true,
+;;       "range": "height"
+;;     }
+;;   ],
+
+;;   "axes": [
+;;     { "orient": "bottom", "scale": "xscale" },
+;;     { "orient": "left", "scale": "yscale" }
+;;   ],
+
+;;   "marks": [
+;;     {
+;;       "type": "rect",
+;;       "from": {"data":"table"},
+;;       "encode": {
+;;         "enter": {
+;;           "x": {"scale": "xscale", "field": "category"},
+;;           "width": {"scale": "xscale", "band": 1},
+;;           "y": {"scale": "yscale", "field": "amount"},
+;;           "y2": {"scale": "yscale", "value": 0}
+;;         }
+;;       }
+;;     },
+;;     {
+;;       "type": "text",
+;;       "encode": {
+;;         "enter": {
+;;           "align": {"value": "center"},
+;;           "baseline": {"value": "bottom"}
+;;         }
+;;       }
+;;     }
+;;   ]
+;; }
+
 
 (comment
 
