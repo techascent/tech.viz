@@ -164,8 +164,8 @@
   (-> (slurp "https://vega.github.io/vega/data/cars.json")
       (clojure.data.json/read-str :key-fn keyword)
       (ds/->dataset)
-      (ds/->flyweight)
-      (histogram->str :Displacement {:bin-count 15})
+      (ds/column :Displacement)
+      (histogram->str "Displacement" {:bin-count 15})
       (->clipboard))
 
   (let [ds (->> (ds/->dataset "https://vega.github.io/vega/data/stocks.csv")
