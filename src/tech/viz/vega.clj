@@ -115,6 +115,7 @@
                      :range "height"
                      :name "yscale")])))
 
+
 (defn histogram->str
   ([ds col & [options]]
    (-> (histogram ds col options)
@@ -144,9 +145,47 @@
                    :name "y"
                    :range "height")]))
 
+
 (defn time-series->str
   [mapseq-ds x-key y-key & [options]]
   (->> (time-series mapseq-ds x-key y-key options)
+       (json/write-str)))
+
+
+(defn bar-chart
+  [bar-ds y-axis-label & [options]]
+  (base-schema
+   options
+   :data [{:name "table"
+           :values bar-ds}]
+   :scales [{:name "xscale"
+             :type "band"
+             :domain {:data "table" :field "category"}
+             :range "width"
+             :padding 0.05
+             :round true}
+            {:name "yscale"
+             :domain {:data "table" :field "amount"}
+             :nice true
+             :range "height"}]
+   :axes [{:orient "bottom"
+           :scale "xscale"
+           :labelAngle -45
+           :labelAlign "right"
+           :labelBaseline "middle"}
+          {:orient "left"
+           :scale "yscale"
+           :title y-axis-label}]
+   :marks [{:type "rect"
+            :from {:data "table"}
+            :encode {:enter {:x {:scale "xscale" :field "category"}
+                             :width {:scale "xscale" :band 1}
+                             :y {:scale "yscale" :field "amount"}
+                             :y2 {:scale "yscale" :value 0}}}}]))
+
+(defn bar-chart->str
+  [bar-ds y-axis-label & [options]]
+  (->> (bar-chart bar-ds y-axis-label options)
        (json/write-str)))
 
 (comment
@@ -187,5 +226,19 @@
         (->clipboard)))
 
   ;; Then, paste into: https://vega.github.io/editor
+
+  (-> (slurp "https://vega.github.io/vega/data/cars.json")
+      (clojure.data.json/read-str :key-fn keyword)
+      (ds/->dataset)
+      (ds/->flyweight :error-on-missing-values? false)
+      (shuffle)
+      ((fn [ds] (->> ds
+                     (remove (comp neg? :Horsepower))
+                     (take 10)
+                     (mapv (fn [{:keys [Name Horsepower]}]
+                             {:category Name
+                              :amount Horsepower})))))
+      (bar-chart->str "Horsepower")
+      (->clipboard))
 
   )
