@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if [[ "$(docker images -q cnuernber/vegan:latest 2> /dev/null)" == "" ]]; then
-  docker pull cuernber/vegan
+  docker pull cnuernber/vegan
 fi
 
 MOUNT_DIR=$1
