@@ -153,6 +153,7 @@
 
   (require '[tech.viz.desktop :refer [->clipboard]])
   (require '[tech.ml.dataset :as ds])
+  (require '[tech.viz.docker-vegan :as docker-vegan])
 
   (-> (ds/->dataset "https://data.cityofchicago.org/api/views/pfsx-4n4m/rows.csv?accessType=DOWNLOAD")
       (ds/->flyweight)
