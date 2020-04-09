@@ -1,8 +1,79 @@
 (ns tech.viz.vega
   "Vega vizualizations of datasets."
-  (:require [clojure.data.json :as json]
-            [tech.v2.datatype :as dtype]
-            [tech.v2.tensor.color-gradients :as gradient]))
+  #?(:clj (:require [clojure.data.json :as json]
+                    [tech.v2.datatype :as dtype]
+                    [tech.v2.datatype.datetime.operations :as dtype-dt-ops]
+                    [tech.v2.tensor.color-gradients :as gradient]
+                    [tech.v2.tensor :as dtt]
+                    [appliedsciencestudio.darkstar :as darkstar]
+                    [clojure.java.shell :as sh]))
+  (:require [tech.viz.gradients :refer [gradients]]))
+
+
+(def gradient-levels 64)
+
+(def default-gradient-set
+  #{:gray-yellow-tones
+    :alpine-colors
+    :blue-green-yellow
+    :brown-cyan-tones
+    :cherry-tones
+    :dark-rainbow
+    :rainbow
+    :green-red
+    :rose-colors
+    :temperature-map})
+
+
+#?(:clj
+   (do
+     (defn expand-gradient
+       [gradient-name]
+       (mapv vec
+             (-> (dtt/reshape (range gradient-levels)
+                              [1 gradient-levels])
+                 (gradient/colorize gradient-name)
+                 (dtt/reshape [gradient-levels 3])
+                 (dtt/slice 1))))
+
+     (defn write-gradients
+       []
+       (spit "src/tech/viz/gradients.cljc"
+             (pr-str
+              (->> default-gradient-set
+                   (map (fn [k]
+                          [k (expand-gradient k)]))
+                   (into {})))))))
+
+
+(defn throw-error
+  [& args]
+  #?(:clj (throw (Exception. (apply str args)))))
+
+
+(defn gradient-vectors
+  [gradient-name input-data]
+  (let [data-min (apply min input-data)
+        data-max (apply max input-data)
+        range (- (long data-max)
+                 (long data-min))
+        multiplier (double (/ (dec (long gradient-levels)) range))
+        gradient-vec (cond
+                       (keyword? gradient-name)
+                       (get gradients gradient-name)
+                       (fn? gradient-name)
+                       gradient-name
+                       :else
+                       (throw-error "Unrecognized gradient name: " gradient-name))
+        _ (when-not gradient-vec
+            (throw-error "Gradient not found" gradient-name))
+        data-min (double data-min)]
+    (->> input-data
+         (mapv (fn [input-data-item]
+                 (let [vec-idx
+                       (long
+                        (* multiplier (- (double input-data-item) data-min)))]
+                   (gradient-vec vec-idx)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Functions for generating vega JS specs for visualization
@@ -56,10 +127,9 @@
                    :zero false)]))
 
 
-(defn scatterplot->str
-  [mapseq-ds x-key y-key & [options]]
-  (->> (scatterplot mapseq-ds x-key y-key options)
-       (json/write-str)))
+(defn bgr->hex-string
+  [[b g r]]
+  (format "#%02X%02X%02X" r g b))
 
 
 (defn histogram
@@ -84,16 +154,14 @@
                                                    (dec bin-count))]
                                 (update-in eax [bin-index :count] inc)))
                             initial-values))
-        color-tensors (-> (map :count values)
-                          (vec)
-                          (gradient/colorize gradient-name)
-                          (tech.v2.tensor/reshape [bin-count 3]))
+        color-tensors (->> (map :count values)
+                           (vec)
+                           (gradient-vectors gradient-name))
         colors (->> color-tensors
-                    (map dtype/->vector)
-                    (map (fn [[b g r]] (format "#%02X%02X%02X" r g b))))
+                    (map bgr->hex-string))
         values (map (fn [v c] (assoc v :color c)) values colors)]
     (base-schema options
-     :axes [{:orient "bottom" :scale "xscale" :tickCount 5}
+     :axes [{:orient "bottom" :scale "xscale" :tickCount 5 :title label}
             {:orient "left" :scale "yscale" :tickCount 5}]
      :data [{:name "binned"
              :values values}]
@@ -115,19 +183,14 @@
                      :range "height"
                      :name "yscale")])))
 
-(defn histogram->str
-  ([ds col & [options]]
-   (-> (histogram ds col options)
-       (json/write-str))))
-
 
 (defn time-series
   "Render a time series to a vega datastructure"
   [mapseq-ds x-key y-key & [options]]
   (base-schema
    options
-   :axes [{:orient "bottom" :scale "x"}
-          {:orient "left" :scale "y"}]
+   :axes [{:orient "bottom" :scale "x" :title x-key}
+          {:orient "left" :scale "y" :title y-key}]
    :data [{:name "table"
            :values (mapv #(select-keys % [x-key y-key]) mapseq-ds)}]
    :marks [{:encode {:enter {:stroke {:value "#222"}
@@ -144,10 +207,40 @@
                    :name "y"
                    :range "height")]))
 
-(defn time-series->str
-  [mapseq-ds x-key y-key & [options]]
-  (->> (time-series mapseq-ds x-key y-key options)
-       (json/write-str)))
+#?(:clj
+   (do
+     (defn scatterplot->str
+       [mapseq-ds x-key y-key & [options]]
+       (->> (scatterplot mapseq-ds x-key y-key options)
+            (json/write-str)))
+
+     (defn histogram->str
+       ([ds col & [options]]
+        (-> (histogram ds col options)
+            (json/write-str))))
+
+     (defn time-series->str
+       [mapseq-ds x-key y-key & [options]]
+       (->> (time-series mapseq-ds x-key y-key options)
+            (json/write-str)))
+
+     (defn vega->svg
+       [vega-spec]
+       (darkstar/vega-spec->svg (json/write-str vega-spec)))
+
+
+     (defn vega->svg-file
+       [vega-spec filename]
+       (spit filename (vega->svg vega-spec)))
+
+
+     (defn desktop-view-vega
+       [vega-spec filename]
+       (vega->svg-file vega-spec filename)
+       (sh/sh "xdg-open" filename)))
+
+   )
+
 
 (comment
 
@@ -155,28 +248,47 @@
   (require '[tech.ml.dataset :as ds])
   (require '[tech.viz.docker-vegan :as docker-vegan])
 
-  (-> (ds/->dataset "https://data.cityofchicago.org/api/views/pfsx-4n4m/rows.csv?accessType=DOWNLOAD")
-      (ds/->flyweight)
-      (scatterplot->str "Longitude" "Total Passing Vehicle Volume")
-      (->clipboard))
+  (def desktop-default-options
+    {:background "#FFFFFF"})
+
+  (def example-scatterplot
+    (-> (ds/->dataset "https://data.cityofchicago.org/api/views/pfsx-4n4m/rows.csv?accessType=DOWNLOAD")
+        (ds/->flyweight)
+        (scatterplot "Longitude" "Total Passing Vehicle Volume"
+                     desktop-default-options)))
+
+  (desktop-view-vega example-scatterplot "scatterplot.svg")
 
   ;;Now open https://vega.github.io/editor/ and paste.
 
-  (-> (slurp "https://vega.github.io/vega/data/cars.json")
-      (clojure.data.json/read-str :key-fn keyword)
-      (ds/->dataset)
-      (ds/column :Displacement)
-      (histogram->str "Displacement" {:bin-count 15})
-      (->clipboard))
+  (def example-histogram
+    (-> (slurp "https://vega.github.io/vega/data/cars.json")
+        (clojure.data.json/read-str :key-fn keyword)
+        (ds/->dataset)
+        (ds/column :Displacement)
+        (histogram "Displacement" (merge desktop-default-options
+                                         {:bin-count 15
+                                          :title "Displacement Histogram"}))))
 
-  (let [ds (->> (ds/->dataset "https://vega.github.io/vega/data/stocks.csv")
-                (ds/ds-filter (fn [{:strs [symbol]}] (= "MSFT" symbol))))
-        sdf (java.text.SimpleDateFormat. "MMM dd yyyy")
-        utc-ms (map #(.getTime (.parse sdf %)) (ds "date"))]
-    (-> (ds/new-column ds "inst" utc-ms {:datatype :int64})
-        (ds/->flyweight)
-        (time-series->str "inst" "price")
-        (->clipboard)))
+
+  (desktop-view-vega example-histogram "histogram.svg")
+
+  (def example-timeseries
+    (as-> (ds/->dataset "https://vega.github.io/vega/data/stocks.csv") ds
+      (ds/ds-filter-column #(= "MSFT" %) "symbol" ds)
+      ;;The time series chart expects time in epoch milliseconds
+      (ds/add-or-update-column ds "date"
+                               (-> (dtype-dt-ops/get-epoch-milliseconds
+                                    (ds "date"))
+                                   (dtype/set-datatype :int64)))
+      (ds/mapseq-reader ds)
+      (time-series ds "date" "price" (merge
+                                      desktop-default-options
+                                      {:title "MSFT Stock Price"}))))
+
+
+  (desktop-view-vega example-timeseries "timeseries.svg")
+
 
   (let [ds (-> (ds/->dataset "https://vega.github.io/vega/data/seattle-temps.csv")
                (ds/select :all (range 1000)))
