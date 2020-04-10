@@ -17,6 +17,45 @@ for processing data in this case.
 ```clojure
 user> (require '[tech.viz.vega :as vega])
 nil
+
+;;functions take a sequence of maps as the first argument
+user> (vega/scatterplot [{:a 1 :b 2} {:a 2 :b 3}] :a :b)
+{:$schema "https://vega.github.io/schema/vega/v5.json",
+ :autosize {:type "fit", :resize true, :contains "padding"},
+ :width 800,
+ :height 450,
+ :axes
+ [{:scale "x", :grid true, :orient "bottom", :title :a, :domain false}
+  {:scale "y", :grid true, :orient "left", :title :b, :domain false}],
+ :scales
+ ({:zero false,
+   :name "x",
+   :type "linear",
+   :round true,
+   :nice true,
+   :domain {:data "source", :field :a},
+   :range "width"}
+  {:zero false,
+   :name "y",
+   :type "linear",
+   :round true,
+   :nice true,
+   :domain {:data "source", :field :b},
+   :range "height"}),
+ :marks
+ [{:encode
+   {:update
+    {:fill {:value "#222"},
+     :stroke {:value "#222"},
+     :opacity {:value 0.5},
+     :shape {:value "circle"},
+     :x {:field :a, :scale "x"},
+     :y {:field :b, :scale "y"}}},
+   :from {:data "source"},
+   :type "symbol"}],
+ :data [{:name "source", :values [{:a 1, :b 2} {:a 2, :b 3}]}]}
+
+
 user> (require '[tech.ml.dataset :as ds])
 nil
 user> (require '[tech.v2.datatype.datetime.operations :as dtype-dt-ops])
