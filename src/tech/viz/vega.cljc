@@ -57,7 +57,9 @@
         data-max (apply max input-data)
         range (- (long data-max)
                  (long data-min))
-        multiplier (double (/ (dec (long gradient-levels)) range))
+        multiplier (if (= 1 (count input-data))
+                     1.0
+                     (double (/ (dec (long gradient-levels)) range)))
         gradient-vec (cond
                        (keyword? gradient-name)
                        (get gradients gradient-name)
@@ -96,40 +98,78 @@
       :as m}]
   (merge m {:nice nice :round round :type type :zero zero}))
 
-(defn scatterplot
-  "Render a scatterplot to a vega datastructure.  Dataset is a sequence of maps"
-  [mapseq-ds x-key y-key & [options]]
-  (base-schema
-   options
-   :axes [(axis :orient "bottom"
-                :scale "x"
-                :title x-key)
-          (axis :orient "left"
-                :scale "y"
-                :title y-key)]
-   :data [{:name "source"
-           :values (mapv #(select-keys % [x-key y-key]) mapseq-ds)}]
-   :marks [{:encode {:update {:fill {:value "#222"}
-                              :stroke {:value "#222"}
-                              :opacity {:value 0.5}
-                              :shape {:value "circle"}
-                              :x {:field x-key :scale "x"}
-                              :y {:field y-key :scale "y"}}}
-            :from {:data "source"}
-            :type "symbol"}]
-   :scales [(scale :domain {:data "source" :field x-key}
-                   :name "x"
-                   :range "width"
-                   :zero false)
-            (scale :domain {:data "source" :field y-key}
-                   :name "y"
-                   :range "height"
-                   :zero false)]))
-
 
 (defn bgr->hex-string
   [[b g r]]
   (format "#%02X%02X%02X" r g b))
+
+
+(defn- label-key->gradient-map
+  [label-key gradient-name mapseq-ds]
+  (when label-key
+    (cond
+      (keyword? gradient-name)
+      (->> (map #(get % label-key) mapseq-ds)
+           (set)
+           (#(gradient-vectors gradient-name
+                               (range (count %))))
+           (mapv bgr->hex-string))
+      (string? gradient-name)
+      gradient-name
+      :else
+      "tableau10")))
+
+
+(defn scatterplot
+  "Render a scatterplot to a vega datastructure.  Dataset is a sequence of maps.
+  Optional arguments
+  :label-key - Use this ordinal value enable different colors for different points.
+  :gradient-name - Name of gradient/color scheme to use for different colors.  Can
+    be one of the default gradient keywords or can be a string in which case it is
+    passed directly to vega.  For more information about which named color schemes
+    are available please see:
+    https://vega.github.io/vega/docs/schemes/"
+  [mapseq-ds x-key y-key & [options]]
+  (let [label-key (:label-key options)
+        gradient-map (label-key->gradient-map
+                      label-key (:gradient-name options)
+                      mapseq-ds)]
+    (base-schema
+     options
+     :axes [(axis :orient "bottom"
+                  :scale "x"
+                  :title x-key)
+            (axis :orient "left"
+                  :scale "y"
+                  :title y-key)]
+     :data [{:name "source"
+             :values (mapv #(select-keys % (if label-key
+                                             [x-key y-key label-key]
+                                             [x-key y-key]))
+                           mapseq-ds)}]
+     :marks [{:encode {:update {:fill (if label-key
+                                        {:scale "color" :field label-key}
+                                        {:value "#222"})
+                                :stroke {:value "#222"}
+                                :opacity {:value 0.5}
+                                :shape {:value "circle"}
+                                :x {:field x-key :scale "x"}
+                                :y {:field y-key :scale "y"}}}
+              :from {:data "source"}
+              :type "symbol"}]
+     :scales (concat [(scale :domain {:data "source" :field x-key}
+                             :name "x"
+                             :range "width"
+                             :zero false)
+                      (scale :domain {:data "source" :field y-key}
+                             :name "y"
+                             :range "height"
+                             :zero false)]
+                     (when label-key
+                       [{:name "color"
+                         :type "ordinal"
+                         :domain {:data "source" :field label-key}
+                         :range {:scheme gradient-map}}])))))
 
 
 (defn histogram
@@ -184,28 +224,59 @@
                      :name "yscale")])))
 
 
+(defn- minmax
+  [data]
+  [(apply min data)
+   (apply max data)])
+
+
 (defn time-series
   "Render a time series to a vega datastructure"
   [mapseq-ds x-key y-key & [options]]
-  (base-schema
-   options
-   :axes [{:orient "bottom" :scale "x" :title x-key}
-          {:orient "left" :scale "y" :title y-key}]
-   :data [{:name "table"
-           :values (mapv #(select-keys % [x-key y-key]) mapseq-ds)}]
-   :marks [{:encode {:enter {:stroke {:value "#222"}
-                             :strokeWidth {:value 2}
-                             :x {:field x-key :scale "x"}
-                             :y {:field y-key :scale "y"}}}
-            :from {:data "table"}
-            :type "line"}]
-   :scales [{:domain {:data "table" :field x-key}
-             :name "x"
-             :range "width"
-             :type "utc"}
-            (scale :domain {:data "table" :field y-key}
-                   :name "y"
-                   :range "height")]))
+  (let [label-key (:label-key options)
+        gradient-map (label-key->gradient-map
+                      label-key (:gradient-name options)
+                      mapseq-ds)
+        mapseq-data (if label-key
+                      (group-by #(get % label-key) mapseq-ds)
+                      {"table" mapseq-ds})
+        x-domain (minmax (map #(get % x-key) mapseq-ds))
+        y-domain (minmax (map #(get % y-key) mapseq-ds))]
+    (base-schema
+     options
+     :axes [{:orient "bottom" :scale "x" :title x-key}
+            {:orient "left" :scale "y" :title y-key}]
+     :data (mapv (fn [[k v]]
+                   {:name k
+                    :values (mapv #(select-keys % (if label-key
+                                                    [x-key y-key label-key]
+                                                    [x-key y-key]))
+                                  v)})
+                 mapseq-data)
+     :marks (mapv (fn [[k _v]]
+                    {:encode
+                     {:enter {:stroke (if label-key
+                                        {:scale "color" :field label-key}
+                                        {:value "#222"})
+                              :strokeWidth {:value 2}
+                              :x {:field x-key :scale "x"}
+                              :y {:field y-key :scale "y"}}}
+                       :from {:data k}
+                       :type "line"})
+                  mapseq-data)
+     :scales (concat [{:domain x-domain
+                       :name "x"
+                       :range "width"
+                       :type "utc"}
+                      (scale :domain y-domain
+                             :name "y"
+                             :range "height")]
+                     (when label-key
+                       [{:name "color"
+                         :type "ordinal"
+                         :domain (vec (set (map #(get % label-key)
+                                                mapseq-ds)))
+                         :range {:scheme gradient-map}}])))))
 
 #?(:clj
    (do
@@ -255,8 +326,10 @@
     (-> (ds/->dataset "https://data.cityofchicago.org/api/views/pfsx-4n4m/rows.csv?accessType=DOWNLOAD")
         (ds/->flyweight)
         (scatterplot "Longitude" "Total Passing Vehicle Volume"
-                     desktop-default-options)))
+                     (merge {:title "Longitude"}
+                            desktop-default-options))))
 
+  (vega->svg-file example-scatterplot "scatterplot.svg")
   (desktop-view-vega example-scatterplot "scatterplot.svg")
 
   ;;Now open https://vega.github.io/editor/ and paste.
@@ -273,18 +346,20 @@
 
   (desktop-view-vega example-histogram "histogram.svg")
 
-  (def example-timeseries
+
+  (def timeseries-data
     (as-> (ds/->dataset "https://vega.github.io/vega/data/stocks.csv") ds
-      (ds/ds-filter-column #(= "MSFT" %) "symbol" ds)
       ;;The time series chart expects time in epoch milliseconds
       (ds/add-or-update-column ds "date"
-                               (-> (dtype-dt-ops/get-epoch-milliseconds
-                                    (ds "date"))
-                                   (dtype/set-datatype :int64)))
+                               (dtype-dt-ops/get-epoch-milliseconds
+                                (ds "date")))
       (ds/mapseq-reader ds)
       (time-series ds "date" "price" (merge
                                       desktop-default-options
-                                      {:title "MSFT Stock Price"}))))
+                                      {:title "Stock Price"
+                                       :label-key "symbol"
+                                       }))
+      (vega->svg-file ds "timeseries.svg")))
 
 
   (desktop-view-vega example-timeseries "timeseries.svg")
