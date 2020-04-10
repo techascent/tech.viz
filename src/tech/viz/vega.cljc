@@ -1,12 +1,7 @@
 (ns tech.viz.vega
   "Vega vizualizations of datasets."
   #?(:clj (:require [clojure.data.json :as json]
-                    [tech.v2.datatype :as dtype]
-                    [tech.v2.datatype.datetime.operations :as dtype-dt-ops]
-                    [tech.v2.tensor.color-gradients :as gradient]
-                    [tech.v2.tensor :as dtt]
-                    [appliedsciencestudio.darkstar :as darkstar]
-                    [clojure.java.shell :as sh]))
+                    [appliedsciencestudio.darkstar :as darkstar]))
   (:require [tech.viz.gradients :refer [gradients]]))
 
 
@@ -23,27 +18,6 @@
     :green-red
     :rose-colors
     :temperature-map})
-
-
-#?(:clj
-   (do
-     (defn expand-gradient
-       [gradient-name]
-       (mapv vec
-             (-> (dtt/reshape (range gradient-levels)
-                              [1 gradient-levels])
-                 (gradient/colorize gradient-name)
-                 (dtt/reshape [gradient-levels 3])
-                 (dtt/slice 1))))
-
-     (defn write-gradients
-       []
-       (spit "src/tech/viz/gradients.cljc"
-             (pr-str
-              (->> default-gradient-set
-                   (map (fn [k]
-                          [k (expand-gradient k)]))
-                   (into {})))))))
 
 
 (defn throw-error
@@ -98,6 +72,14 @@
       :as m}]
   (merge m {:nice nice :round round :type type :zero zero}))
 
+(defn default-legends
+  [vega-spec {:keys [label-key] :as options}]
+  (merge vega-spec
+         (when label-key
+           {:legends [{:type :symbol
+                       :fill "color"
+                       :orient (:legend-orient options "right")}]})))
+
 
 (defn bgr->hex-string
   [[b g r]]
@@ -134,42 +116,43 @@
         gradient-map (label-key->gradient-map
                       label-key (:gradient-name options)
                       mapseq-ds)]
-    (base-schema
-     options
-     :axes [(axis :orient "bottom"
-                  :scale "x"
-                  :title x-key)
-            (axis :orient "left"
-                  :scale "y"
-                  :title y-key)]
-     :data [{:name "source"
-             :values (mapv #(select-keys % (if label-key
-                                             [x-key y-key label-key]
-                                             [x-key y-key]))
-                           mapseq-ds)}]
-     :marks [{:encode {:update {:fill (if label-key
-                                        {:scale "color" :field label-key}
-                                        {:value "#222"})
-                                :stroke {:value "#222"}
-                                :opacity {:value 0.5}
-                                :shape {:value "circle"}
-                                :x {:field x-key :scale "x"}
-                                :y {:field y-key :scale "y"}}}
-              :from {:data "source"}
-              :type "symbol"}]
-     :scales (concat [(scale :domain {:data "source" :field x-key}
-                             :name "x"
-                             :range "width"
-                             :zero false)
-                      (scale :domain {:data "source" :field y-key}
-                             :name "y"
-                             :range "height"
-                             :zero false)]
-                     (when label-key
-                       [{:name "color"
-                         :type "ordinal"
-                         :domain {:data "source" :field label-key}
-                         :range {:scheme gradient-map}}])))))
+    (-> (base-schema
+         options
+         :axes [(axis :orient "bottom"
+                      :scale "x"
+                      :title x-key)
+                (axis :orient "left"
+                      :scale "y"
+                      :title y-key)]
+         :data [{:name "source"
+                 :values (mapv #(select-keys % (if label-key
+                                                 [x-key y-key label-key]
+                                                 [x-key y-key]))
+                               mapseq-ds)}]
+         :marks [{:encode {:update {:fill (if label-key
+                                            {:scale "color" :field label-key}
+                                            {:value "#222"})
+                                    :stroke {:value "#222"}
+                                    :opacity {:value 0.5}
+                                    :shape {:value "circle"}
+                                    :x {:field x-key :scale "x"}
+                                    :y {:field y-key :scale "y"}}}
+                  :from {:data "source"}
+                  :type "symbol"}]
+         :scales (concat [(scale :domain {:data "source" :field x-key}
+                                 :name "x"
+                                 :range "width"
+                                 :zero false)
+                          (scale :domain {:data "source" :field y-key}
+                                 :name "y"
+                                 :range "height"
+                                 :zero false)]
+                         (when label-key
+                           [{:name "color"
+                             :type "ordinal"
+                             :domain {:data "source" :field label-key}
+                             :range {:scheme gradient-map}}])))
+        (default-legends options))))
 
 
 (defn histogram
@@ -242,41 +225,42 @@
                       {"table" mapseq-ds})
         x-domain (minmax (map #(get % x-key) mapseq-ds))
         y-domain (minmax (map #(get % y-key) mapseq-ds))]
-    (base-schema
-     options
-     :axes [{:orient "bottom" :scale "x" :title x-key}
-            {:orient "left" :scale "y" :title y-key}]
-     :data (mapv (fn [[k v]]
-                   {:name k
-                    :values (mapv #(select-keys % (if label-key
-                                                    [x-key y-key label-key]
-                                                    [x-key y-key]))
-                                  v)})
-                 mapseq-data)
-     :marks (mapv (fn [[k _v]]
-                    {:encode
-                     {:enter {:stroke (if label-key
-                                        {:scale "color" :field label-key}
-                                        {:value "#222"})
-                              :strokeWidth {:value 2}
-                              :x {:field x-key :scale "x"}
-                              :y {:field y-key :scale "y"}}}
-                       :from {:data k}
-                       :type "line"})
-                  mapseq-data)
-     :scales (concat [{:domain x-domain
-                       :name "x"
-                       :range "width"
-                       :type "utc"}
-                      (scale :domain y-domain
-                             :name "y"
-                             :range "height")]
-                     (when label-key
-                       [{:name "color"
-                         :type "ordinal"
-                         :domain (vec (set (map #(get % label-key)
-                                                mapseq-ds)))
-                         :range {:scheme gradient-map}}])))))
+    (-> (base-schema
+         options
+         :axes [{:orient "bottom" :scale "x" :title x-key}
+                {:orient "left" :scale "y" :title y-key}]
+         :data (mapv (fn [[k v]]
+                       {:name k
+                        :values (mapv #(select-keys % (if label-key
+                                                        [x-key y-key label-key]
+                                                        [x-key y-key]))
+                                      v)})
+                     mapseq-data)
+         :marks (mapv (fn [[k _v]]
+                        {:encode
+                         {:enter {:stroke (if label-key
+                                            {:scale "color" :field label-key}
+                                            {:value "#222"})
+                                  :strokeWidth {:value 2}
+                                  :x {:field x-key :scale "x"}
+                                  :y {:field y-key :scale "y"}}}
+                         :from {:data k}
+                         :type "line"})
+                      mapseq-data)
+         :scales (concat [{:domain x-domain
+                           :name "x"
+                           :range "width"
+                           :type "utc"}
+                          (scale :domain y-domain
+                                 :name "y"
+                                 :range "height")]
+                         (when label-key
+                           [{:name "color"
+                             :type "ordinal"
+                             :domain (vec (set (map #(get % label-key)
+                                                    mapseq-ds)))
+                             :range {:scheme gradient-map}}])))
+        (default-legends options))))
 
 #?(:clj
    (do
@@ -302,35 +286,57 @@
 
      (defn vega->svg-file
        [vega-spec filename]
-       (spit filename (vega->svg vega-spec)))
-
-
-     (defn desktop-view-vega
-       [vega-spec filename]
-       (vega->svg-file vega-spec filename)
-       (sh/sh "xdg-open" filename)))
+       (spit filename (vega->svg vega-spec))))
 
    )
 
 
 (comment
 
-  (require '[tech.viz.desktop :refer [->clipboard]])
-  (require '[tech.ml.dataset :as ds])
-  (require '[tech.viz.docker-vegan :as docker-vegan])
+  (do
+    (require '[tech.v2.datatype :as dtype])
+    (require '[tech.v2.datatype.datetime.operations :as dtype-dt-ops])
+    (require '[tech.v2.tensor.color-gradients :as gradient])
+    (require '[tech.v2.tensor :as dtt])
+    (require '[tech.ml.dataset :as ds])
+    (require '[clojure.java.shell :as sh])
+    (defn expand-gradient
+      [gradient-name]
+      (mapv vec
+            (-> (dtt/reshape (range gradient-levels)
+                             [1 gradient-levels])
+                (gradient/colorize gradient-name)
+                (dtt/reshape [gradient-levels 3])
+                (dtt/slice 1))))
 
-  (def desktop-default-options
-    {:background "#FFFFFF"})
+    (defn write-gradients
+      []
+      (spit "src/tech/viz/gradients.cljc"
+            (pr-str
+             (->> default-gradient-set
+                  (map (fn [k]
+                         [k (expand-gradient k)]))
+                  (into {})))))
+    (def desktop-default-options {:background "#FFFFFF"})
+
+
+    (defn desktop-view-vega
+      [vega-spec filename]
+      (vega->svg-file vega-spec filename)
+      (sh/sh "xdg-open" filename))
+
+
+     )
+
 
   (def example-scatterplot
-    (-> (ds/->dataset "https://data.cityofchicago.org/api/views/pfsx-4n4m/rows.csv?accessType=DOWNLOAD")
-        (ds/->flyweight)
-        (scatterplot "Longitude" "Total Passing Vehicle Volume"
-                     (merge {:title "Longitude"}
-                            desktop-default-options))))
-
-  (vega->svg-file example-scatterplot "scatterplot.svg")
-  (desktop-view-vega example-scatterplot "scatterplot.svg")
+    (-> (ds/->dataset "test/data/spiral-ds.csv")
+        (ds/mapseq-reader)
+        (scatterplot "x" "y"
+                     (merge {:title "Spriral Dataset"
+                             :label-key "label"}
+                            desktop-default-options))
+        (vega->svg-file "scatterplot.svg")))
 
   ;;Now open https://vega.github.io/editor/ and paste.
 
@@ -351,14 +357,25 @@
     (as-> (ds/->dataset "https://vega.github.io/vega/data/stocks.csv") ds
       ;;The time series chart expects time in epoch milliseconds
       (ds/add-or-update-column ds "date"
-                               (dtype-dt-ops/get-epoch-milliseconds
-                                (ds "date")))
+                               (dtype-dt-ops/get-epoch-milliseconds (ds "date")))
       (ds/mapseq-reader ds)
       (time-series ds "date" "price" (merge
                                       desktop-default-options
                                       {:title "Stock Price"
-                                       :label-key "symbol"
-                                       }))
+                                       :label-key "symbol"}))
+      (vega->svg-file ds "timeseries.svg")))
+
+  (def timeseries-subset
+    (as-> (ds/->dataset "https://vega.github.io/vega/data/stocks.csv") ds
+      ;;The time series chart expects time in epoch milliseconds
+      (ds/add-or-update-column ds "year" (dtype-dt-ops/get-years (ds "date")))
+      (ds/filter-column #{2007 2008 2009} "year" ds)
+      (ds/update-column ds "date" dtype-dt-ops/get-epoch-milliseconds)
+      (ds/mapseq-reader ds)
+      (time-series ds "date" "price" (merge
+                                      desktop-default-options
+                                      {:title "Stock Price (2007-2010)"
+                                       :label-key "symbol"}))
       (vega->svg-file ds "timeseries.svg")))
 
 
