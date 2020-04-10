@@ -1,6 +1,6 @@
 (defproject techascent/tech.viz "0.1-SNAPSHOT"
-  :description "Visualization library"
-  :url "http://example.com/FIXME"
+  :description "Simple Vega visualization library"
+  :url "http://github.com/techascent/tech.viz"
   :license {:name "EPL-2.0"
             :url "https://www.eclipse.org/legal/epl-2.0/"}
     :plugins [[lein-tools-deps "0.4.5"]]
