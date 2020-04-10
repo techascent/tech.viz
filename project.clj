@@ -1,4 +1,4 @@
-(defproject techascent/tech.viz "0.1"
+(defproject techascent/tech.viz "0.2-SNAPSHOT"
   :description "Simple Vega visualization library"
   :url "http://github.com/techascent/tech.viz"
   :license {:name "EPL-2.0"
