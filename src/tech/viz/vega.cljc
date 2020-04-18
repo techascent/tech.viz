@@ -1,7 +1,7 @@
 (ns tech.viz.vega
   "Vega vizualizations of datasets."
   #?(:clj (:require [clojure.data.json :as json]
-                    [appliedsciencestudio.darkstar :as darkstar]))
+                    [applied-science.darkstar :as darkstar]))
   (:require [tech.viz.gradients :refer [gradients]]))
 
 
