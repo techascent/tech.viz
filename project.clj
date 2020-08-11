@@ -3,8 +3,10 @@
   :url "http://github.com/techascent/tech.viz"
   :license {:name "EPL-2.0"
             :url "https://www.eclipse.org/legal/epl-2.0/"}
-    :plugins [[lein-tools-deps "0.4.5"]]
-  :middleware [lein-tools-deps.plugin/resolve-dependencies-with-deps-edn]
-  :lein-tools-deps/config {:config-files [:install :user :project]}
-  :profiles {:dev {:lein-tools-deps/config {:resolve-aliases [:test]}}
-             :uberjar {:aot :all}})
+  :dependencies [[org.clojure/clojure "1.10.1"]
+                 [org.clojure/data.json "0.2.7"]
+                 [metasoarous/darkstar "0.1.0"]]
+  :profiles {:uberjar {:aot :all}
+             :test {:dependencies [[techascent/tech.ml.dataset "4.02"]
+                                   [ch.qos.logback/logback-classic "1.1.3"]
+                                   [http-kit "2.4.0"]]}})
