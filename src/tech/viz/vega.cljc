@@ -294,8 +294,10 @@
              :domain {:data "table"
                       :field "c"}}]
    :axes [{:orient "bottom" :scale "x" :zindex 1
-           :labelAngle -30
-           :labelAlign :right}
+           :labelAngle -90
+           :labelAlign :right
+           :labelOverlap true
+           :labelBaseline :middle}
           {:orient "left" :scale "y" :zindex 1}]
    :marks [{:type "rect"
             :from {:data "table"}
