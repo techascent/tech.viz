@@ -286,19 +286,18 @@
 
      (defn vega->svg-file
        [vega-spec filename]
-       (spit filename (vega->svg vega-spec))))
-
-   )
+       (spit filename (vega->svg vega-spec))
+       :ok)))
 
 
 (comment
 
   (do
-    (require '[tech.v2.datatype :as dtype])
-    (require '[tech.v2.datatype.datetime.operations :as dtype-dt-ops])
-    (require '[tech.v2.tensor.color-gradients :as gradient])
-    (require '[tech.v2.tensor :as dtt])
-    (require '[tech.ml.dataset :as ds])
+    (require '[tech.v3.datatype :as dtype])
+    (require '[tech.v3.datatype.datetime :as dtype-dt])
+    (require '[tech.v3.tensor.color-gradients :as gradient])
+    (require '[tech.v3.tensor :as dtt])
+    (require '[tech.v3.dataset :as ds])
     (require '[clojure.java.shell :as sh])
     (defn expand-gradient
       [gradient-name]
@@ -325,7 +324,7 @@
       (vega->svg-file vega-spec filename)
       (sh/sh "xdg-open" filename))
 
-
+    (ds/head (ds/->dataset "test/data/spiral-ds.csv"))
      )
 
 
@@ -335,8 +334,7 @@
         (scatterplot "x" "y"
                      (merge {:title "Spriral Dataset"
                              :label-key "label"}
-                            desktop-default-options))
-        (vega->svg-file "scatterplot.svg")))
+                            desktop-default-options))))
 
   ;;Now open https://vega.github.io/editor/ and paste.
 
@@ -357,7 +355,7 @@
     (as-> (ds/->dataset "https://vega.github.io/vega/data/stocks.csv") ds
       ;;The time series chart expects time in epoch milliseconds
       (ds/add-or-update-column ds "date"
-                               (dtype-dt-ops/get-epoch-milliseconds (ds "date")))
+                               (dtype-dt/datetime->epoch (ds "date")))
       (ds/mapseq-reader ds)
       (time-series ds "date" "price" (merge
                                       desktop-default-options
@@ -365,31 +363,20 @@
                                        :label-key "symbol"}))
       (vega->svg-file ds "timeseries.svg")))
 
-  (def timeseries-subset
-    (as-> (ds/->dataset "https://vega.github.io/vega/data/stocks.csv") ds
+  (def example-timeseries
+    (ds/bind-> (ds/->dataset "https://vega.github.io/vega/data/stocks.csv") ds
       ;;The time series chart expects time in epoch milliseconds
-      (ds/add-or-update-column ds "year" (dtype-dt-ops/get-years (ds "date")))
-      (ds/filter-column #{2007 2008 2009} "year" ds)
-      (ds/update-column ds "date" dtype-dt-ops/get-epoch-milliseconds)
-      (ds/mapseq-reader ds)
-      (time-series ds "date" "price" (merge
-                                      desktop-default-options
-                                      {:title "Stock Price (2007-2010)"
-                                       :label-key "symbol"}))
-      (vega->svg-file ds "timeseries.svg")))
+      (assoc "year" (dtype-dt/long-temporal-field :years (ds "date")))
+      (ds/filter-column "year" #{2007 2008 2009})
+      (ds/update-column "date" dtype-dt/datetime->epoch)
+      (ds/mapseq-reader)
+      (time-series "date" "price" (merge
+                                     desktop-default-options
+                                     {:title "Stock Price (2007-2010)"
+                                      :label-key "symbol"}))))
 
 
   (desktop-view-vega example-timeseries "timeseries.svg")
-
-
-  (let [ds (-> (ds/->dataset "https://vega.github.io/vega/data/seattle-temps.csv")
-               (ds/select :all (range 1000)))
-        sdf (java.text.SimpleDateFormat. "yyyy/MM/dd HH:mm")
-        utc-ms (map #(.getTime (.parse sdf %)) (ds "date"))]
-    (-> (ds/new-column ds "inst" utc-ms {:datatype :int64})
-        (ds/->flyweight)
-        (time-series->str "inst" "temp")
-        (->clipboard)))
 
   ;; Then, paste into: https://vega.github.io/editor
 
