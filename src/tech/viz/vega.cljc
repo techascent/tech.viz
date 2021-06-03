@@ -262,6 +262,51 @@
                              :range {:scheme gradient-map}}])))
         (default-legends options))))
 
+(defn stacked-bar-chart
+  "data is a sequence of maps with keys :x :y and :c, sorted by :x
+  :x is the groups on the x-axis
+  :y is the height of the bar-part for that x
+  :c is in (0, 1, ...) and corresponds to both the indexes in the color vector and the bottom-up order of the stack categories"
+  [data colors & [options]]
+  (base-schema
+   options
+   :data [{:name "table"
+           :values data
+           :transform [{:type "stack"
+                        :groupby ["x"]
+                        :sort {:field "c"}
+                        :field "y"}]}]
+   :scales [{:name "x"
+             :type "band"
+             :range "width"
+             :domain {:data "table"
+                      :field "x"}}
+            {:name "y"
+             :type "linear"
+             :range "height"
+             :nice true
+             :zero true
+             :domain {:data "table"
+                      :field "y1"}}
+            {:name "color"
+             :type "ordinal"
+             :range colors
+             :domain {:data "table"
+                      :field "c"}}]
+   :axes [{:orient "bottom" :scale "x" :zindex 1
+           :labelAngle -90
+           :labelAlign :right
+           :labelOverlap true
+           :labelBaseline :middle}
+          {:orient "left" :scale "y" :zindex 1}]
+   :marks [{:type "rect"
+            :from {:data "table"}
+            :encode {:enter {:x {:scale "x" :field "x"}
+                             :width {:scale "x" :band 1 :offset -1}
+                             :y {:scale "y" :field "y0"}
+                             :y2 {:scale "y" :field "y1" :offset 1}
+                             :fill {:scale "color" :field "c"}}}}]))
+
 #?(:clj
    (do
      (defn scatterplot->str
@@ -379,5 +424,14 @@
   (desktop-view-vega example-timeseries "timeseries.svg")
 
   ;; Then, paste into: https://vega.github.io/editor
+
+  (let [ds (-> (ds/->dataset "https://vega.github.io/vega/data/seattle-temps.csv")
+               (ds/select :all (range 1000)))
+        sdf (java.text.SimpleDateFormat. "yyyy/MM/dd HH:mm")
+        utc-ms (map #(.getTime (.parse sdf %)) (ds "date"))]
+    (-> (ds/new-column ds "inst" utc-ms {:datatype :int64})
+        (ds/->flyweight)
+        (time-series->str "inst" "temp")
+        (->clipboard)))
 
   )
