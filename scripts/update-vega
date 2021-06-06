@@ -1,0 +1,6 @@
+#!/bin/bash
+
+
+wget https://cdn.jsdelivr.net/npm/vega-lite@5 -O resources/vega-lite.js
+wget https://cdn.jsdelivr.net/npm/vega@5 -O resources/vega.js
+wget https://cdn.jsdelivr.net/npm/vega-embed@6 -O resources/vega-embed.js

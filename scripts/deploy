@@ -1,0 +1,6 @@
+#!/bin/bash
+
+
+rm -rf target/*
+clj -X:depstar
+clj -X:deploy

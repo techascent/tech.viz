@@ -326,7 +326,8 @@
 
      (defn vega->svg
        [vega-spec]
-       (darkstar/vega-spec->svg (json/write-str vega-spec)))
+       (darkstar/vega-spec->svg
+        (json/write-str vega-spec :escape-slash false)))
 
 
      (defn vega->svg-file

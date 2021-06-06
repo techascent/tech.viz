@@ -1,7 +1,9 @@
 (ns tech.viz.pyplot
   (:require [tech.viz.vega :as vega]
             [tech.viz.gradients :refer [gradients]]
-            [clojure.java.shell :as sh])
+            [clojure.java.shell :as sh]
+            [applied-science.darkstar :as darkstar]
+            [clojure.data.json :as json])
   (:import [java.io File]
            [java.nio.file Paths]
            [java.util UUID]))
@@ -55,6 +57,9 @@
                    (into {}))})))
 
 
+;;TODO - set y axis
+
+
 (defn plot
   ([fig x y options]
    (generic-plot fig
@@ -86,13 +91,26 @@
    (axhline fig y nil)))
 
 
+(defn ->json
+  [fig]
+  (json/write-str fig :escape-slash false))
+
+
 (defn show
   [fig]
   (let [fname (path (System/getProperty "java.io.tmpdir")
-                    (str (UUID/randomUUID) ".svg"))]
-    (vega/vega->svg-file fig fname)
+                    (str (UUID/randomUUID) ".svg"))
+        svg-data (-> (->json fig)
+                     (darkstar/vega-lite-spec->svg))]
+    (spit fname svg-data)
     (.deleteOnExit (File. fname))
     (sh/sh "xdg-open" fname)))
+
+
+(defn ->clipboard
+  [fig]
+  (let [clip-fn (requiring-resolve 'tech.viz.desktop/->clipboard)]
+    (clip-fn (->json fig))))
 
 
 (defn subplots
@@ -114,6 +132,6 @@
     (require '[clojure.data.json :as json])
     (defn clip [plt]
       (-> (with-out-str
-            (json/pprint-json plt))
+            (json/pprint-json plt :escape-slash false))
           (->clipboard))))
   )
