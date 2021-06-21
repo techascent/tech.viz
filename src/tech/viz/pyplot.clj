@@ -8,10 +8,12 @@
            [java.nio.file Paths]
            [java.util UUID]))
 
+
 (defn- path
   ^String [src-path & paths]
   (-> (Paths/get (str src-path) (into-array String (map str paths)))
       (.toString)))
+
 
 (defn figure
   ([options]
@@ -25,7 +27,6 @@
          :height (* (long h) dpi)})
       (select-keys options [:title]))))
   ([] (figure nil)))
-
 
 
 (defn- get-color
@@ -53,18 +54,34 @@
               :encoding
               (->> dkeys
                    (map (fn [k]
-                          [k {:field k :type :quantitative :axis {:grid false}}]))
+                          [k (merge {:field k :type :quantitative
+                                     :axis {:grid false}}
+                                    (when-let [k-scale (get-in options [k :scale])]
+                                      {:scale (get-in options [k :scale])}))]))
                    (into {}))})))
 
 
 ;;TODO - set y axis
+(defn set-domains
+  [options data-map]
+  (->> data-map
+       (reduce
+        (fn [options [k v]]
+          (if-let [existing (get-in options [k :scale :domain])]
+            options
+            (assoc-in options [k :scale :domain]
+                      [(apply min v) (apply max v)])))
+        options)))
 
 
 (defn plot
   ([fig x y options]
    (generic-plot fig
                  (mapv #(hash-map :x %1 :y %2) x y)
-                 (merge {:mark-type :line} options)))
+                 (merge {:mark-type :line}
+                        (set-domains options
+                                     {:x x
+                                      :y y}))))
   ([fig x y]
    (plot fig x y nil)))
 
@@ -73,7 +90,9 @@
   ([fig x y options]
    (generic-plot fig
                  (mapv #(hash-map :x %1 :y %2) x y)
-                 (merge {:mark-type :point} options)))
+                 (merge {:mark-type :point}
+                        (set-domains options {:x x
+                                              :y y}))))
   ([fig x y] (scatter fig x y nil)))
 
 
@@ -93,7 +112,7 @@
 
 (defn ->json
   [fig]
-  (json/write-str fig :escape-slash false))
+  (json/write-str fig :escape-slash false :indent true))
 
 
 (defn show
@@ -104,7 +123,8 @@
                      (darkstar/vega-lite-spec->svg))]
     (spit fname svg-data)
     (.deleteOnExit (File. fname))
-    (sh/sh "xdg-open" fname)))
+    (future (sh/sh "xdg-open" fname))
+    nil))
 
 
 (defn ->clipboard
@@ -127,11 +147,10 @@
 
 
 (comment
-  (do
-    (require '[tech.viz.desktop :refer [->clipboard]])
-    (require '[clojure.data.json :as json])
-    (defn clip [plt]
-      (-> (with-out-str
-            (json/pprint-json plt :escape-slash false))
-          (->clipboard))))
+  (def xs (range 20 100))
+  (def ys (->> xs (map #(+ 5 (Math/sin (/ (double %) 10))))))
+
+  (-> (plot (figure {:figsize [12 4]}) xs ys {:x {:scale {:domain [0 100]}}})
+      (show))
+
   )
