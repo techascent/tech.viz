@@ -61,7 +61,6 @@
                    (into {}))})))
 
 
-;;TODO - set y axis
 (defn set-domains
   [options data-map]
   (->> data-map
@@ -98,7 +97,11 @@
 
 (defn axvline
   ([fig x options]
-   (generic-plot fig [{:x x}] (merge {:mark-type :rule} options)))
+   (generic-plot fig [{:x x}]
+                 (merge {:mark-type :rule}
+                        (update-in options
+                                   [:x :scale :domain]
+                                   #(or % [x x])))))
   ([fig x]
    (axvline fig x nil)))
 
@@ -141,7 +144,7 @@
      (assert (= n-plots (* nrows ncols)))
      (merge (figure options)
             {:columns ncols
-             :concat (mapv #(select-keys % [:layer :title]) plots)})))
+             :concat (mapv #(select-keys % [:layer :title :width :height]) plots)})))
   ([plots]
    (subplots nil plots)))
 
