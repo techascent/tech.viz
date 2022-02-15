@@ -307,6 +307,63 @@
                              :y2 {:scale "y" :field "y1" :offset 1}
                              :fill {:scale "color" :field "c"}}}}]))
 
+(defn pairs
+  [data fields & [options]]
+  (let [label-key (:label-key options)
+        gradient-map (label-key->gradient-map
+                      label-key (:gradient-name options)
+                      data)]
+    (base-schema
+     (assoc options
+            :width (+ 8 (* 100 (count fields)))
+            :height (+ 8 (* 100 (count fields))))
+     :data [{:name "table" :values data}]
+     :scales (concat
+              (for [field fields]
+                (scale :name field
+                       :domain {:data "table" :field field}
+                       :range [0 100]
+                       :zero false))
+              (when label-key
+                [{:name "color"
+                  :type "ordinal"
+                  :domain (vec (set (map #(get % label-key) data)))
+                  :range {:scheme gradient-map}}]))
+     :marks (->> (for [x (range (count fields))
+                       y (range (count fields))]
+                   (if (= x y)
+                     {:encode {:enter {:fill {:value "#222"}
+                                       :text {:value (name (nth fields x))}
+                                       :x {:value (+ 50 (* 100 x))}
+                                       :y {:value (+ 50 (* 100 y))}
+                                       :align {:value :center}
+                                       :baseline {:value :middle}}}
+                      :type "text"}
+                     (let [c (if label-key
+                               {:scale "color" :field label-key}
+                               {:value "#222"})]
+                       {:encode {:update {:fill c
+                                          :stroke c
+                                          :strokeWidth {:value 1}
+                                          :opacity {:value 0.5}
+                                          :shape {:value "circle"}
+                                          :size {:value 4}
+                                          :x {:field (nth fields x) :scale (nth fields x)}
+                                          :y {:field (nth fields y) :scale (nth fields y)}}}
+                        :from {:data "table"}
+                        :type "symbol"
+                        :transform [{:type :formula :as :x :expr (str "datum.x+100*" x)}
+                                    {:type :formula :as :y :expr (str "datum.y+100*" y)}]})))
+                 (concat (for [x (range (count fields))
+                               y (range (count fields))]
+                           {:encode {:enter {:fill :none
+                                             :stroke {:value "#ddd"}
+                                             :strokeWidth {:value 1}
+                                             :x {:value (+ 0.5 (* 100 x))} :x2 {:value (+ (* 100 (inc x)) 0.5)}
+                                             :y {:value (+ 0.5 (* 100 y))} :y2 {:value (+ (* 100 (inc y)) 0.5)}}}
+                            :type "rect"}))
+                 (remove nil?)))))
+
 #?(:clj
    (do
      (defn scatterplot->str
@@ -434,5 +491,26 @@
         (ds/->flyweight)
         (time-series->str "inst" "temp")
         (->clipboard)))
+
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; Pairs
+  (def iris-raw-str* (delay (slurp "https://archive.ics.uci.edu/ml/machine-learning-databases/iris/iris.data")))
+  (def iris-mapseq
+    (->> @iris-raw-str*
+         (clojure.string/split-lines)
+         (map #(clojure.string/split % #"\,"))
+         (map (fn [[sl sw pl pw class]]
+                {:sepal-length (Double. sl)
+                 :sepal-width (Double. sw)
+                 :petal-length (Double. pl)
+                 :petal-width (Double. pw)
+                 :class class}))))
+  (let [spec (pairs iris-mapseq
+                    [:sepal-length :sepal-width :petal-length :petal-width]
+                    {:label-key :class
+                     :background :#f8f8f8})]
+    (clojure.pprint/pprint spec)
+    (vega->svg-file spec "test.svg"))
 
   )
