@@ -110,9 +110,47 @@ nil
 
 ![timeseries](images/timeseries.svg)
 
+---
+
+#### Iris pairs plot
+
+Raw data as a string:
+
+```clojure
+(def iris-raw-str* (delay (slurp "https://archive.ics.uci.edu/ml/machine-learning-databases/iris/iris.data")))
+```
+
+Converted to a sequence of maps:
+
+```clojure
+(def iris-mapseq
+  (->> @iris-raw-str*
+       (clojure.string/split-lines)
+       (map #(clojure.string/split % #"\,"))
+       (map (fn [[sl sw pl pw class]]
+              {:sepal-length (Double. sl)
+               :sepal-width (Double. sw)
+               :petal-length (Double. pl)
+               :petal-width (Double. pw)
+               :class class}))))
+```
+
+And saved as an svg:
+
+```clojure
+(let [spec (pairs iris-mapseq
+                  [:sepal-length :sepal-width :petal-length :petal-width]
+                  {:label-key :class
+                   :background :#f8f8f8})]
+  (clojure.pprint/pprint spec)
+  (vega->svg-file spec "iris-pairs.svg"))
+```
+
+![pairs](images/pairs.svg)
+
 ## License
 
-Copyright © 2020 TechAscent, LLC
+Copyright © 2022 TechAscent, LLC
 
 This program and the accompanying materials are made available under the
 terms of the Eclipse Public License 2.0 which is available at
