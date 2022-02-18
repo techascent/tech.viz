@@ -309,60 +309,69 @@
 
 (defn pairs
   [data fields & [options]]
-  (let [label-key (:label-key options)
+  (let [width (get options :width 800)
+        cell (/ (double width) (count fields))
+        cell2 (/ cell 2)
+        label-key (:label-key options)
         gradient-map (label-key->gradient-map
                       label-key (:gradient-name options)
                       data)]
-    (base-schema
-     (assoc options
-            :width (+ 8 (* 100 (count fields)))
-            :height (+ 8 (* 100 (count fields))))
-     :data [{:name "table" :values data}]
-     :scales (concat
-              (for [field fields]
-                (scale :name field
-                       :domain {:data "table" :field field}
-                       :range [0 100]
-                       :zero false))
-              (when label-key
-                [{:name "color"
-                  :type "ordinal"
-                  :domain (vec (set (map #(get % label-key) data)))
-                  :range {:scheme gradient-map}}]))
-     :marks (->> (for [x (range (count fields))
-                       y (range (count fields))]
-                   (if (= x y)
-                     {:encode {:enter {:fill {:value "#222"}
-                                       :text {:value (name (nth fields x))}
-                                       :x {:value (+ 50 (* 100 x))}
-                                       :y {:value (+ 50 (* 100 y))}
-                                       :align {:value :center}
-                                       :baseline {:value :middle}}}
-                      :type "text"}
-                     (let [c (if label-key
-                               {:scale "color" :field label-key}
-                               {:value "#222"})]
-                       {:encode {:update {:fill c
-                                          :stroke c
-                                          :strokeWidth {:value 1}
-                                          :opacity {:value 0.5}
-                                          :shape {:value "circle"}
-                                          :size {:value 4}
-                                          :x {:field (nth fields x) :scale (nth fields x)}
-                                          :y {:field (nth fields y) :scale (nth fields y)}}}
-                        :from {:data "table"}
-                        :type "symbol"
-                        :transform [{:type :formula :as :x :expr (str "datum.x+100*" x)}
-                                    {:type :formula :as :y :expr (str "datum.y+100*" y)}]})))
-                 (concat (for [x (range (count fields))
-                               y (range (count fields))]
-                           {:encode {:enter {:fill :none
-                                             :stroke {:value "#ddd"}
-                                             :strokeWidth {:value 1}
-                                             :x {:value (+ 0.5 (* 100 x))} :x2 {:value (+ (* 100 (inc x)) 0.5)}
-                                             :y {:value (+ 0.5 (* 100 y))} :y2 {:value (+ (* 100 (inc y)) 0.5)}}}
-                            :type "rect"}))
-                 (remove nil?)))))
+    (-> (base-schema
+         (assoc options :width width :height width)
+         :data [{:name "table" :values data}]
+         :scales (concat
+                  (->> (for [field fields]
+                         [(scale :name field
+                                 :domain {:data "table" :field field}
+                                 :range [(* 0.03 cell) (* 0.97 cell)]
+                                 :zero false)
+                          (scale :name (str field "-reverse")
+                                 :domain {:data "table" :field field}
+                                 :range [(* 0.97 cell) (* 0.03 cell)]
+                                 :zero false)])
+                       (apply concat))
+                  (when label-key
+                    [{:name "color"
+                      :type "ordinal"
+                      :domain (vec (set (map #(get % label-key) data)))
+                      :range {:scheme gradient-map}}]))
+         :marks (->> (for [x (range (count fields))
+                           y (range (count fields))]
+                       (if (= x y)
+                         {:encode {:enter {:fill {:value "#222"}
+                                           :text {:value (name (nth fields x))}
+                                           :x {:value (+ cell2 (* cell x))}
+                                           :y {:value (+ cell2 (* cell y))}
+                                           :align {:value :center}
+                                           :baseline {:value :middle}}}
+                          :type "text"}
+                         (let [c (if label-key
+                                   {:scale "color" :field label-key}
+                                   {:value "#222"})]
+                           {:encode {:update {:fill c
+                                              :stroke c
+                                              :strokeWidth {:value 1}
+                                              :opacity {:value 0.75}
+                                              :shape {:value "circle"}
+                                              :size {:value (* cell 0.1)}
+                                              :x {:field (nth fields x) :scale (nth fields x)}
+                                              :y {:field (nth fields y) :scale (str (nth fields y) "-reverse")}}}
+                            :from {:data "table"}
+                            :type "symbol"
+                            :transform [{:type :formula :as :x :expr (str "datum.x+"cell"*" x)}
+                                        {:type :formula :as :y :expr (str "datum.y+"cell"*" y)}]})))
+                     (concat (for [x (range (count fields))
+                                   y (range (count fields))]
+                               {:encode {:enter {:fill :none
+                                                 :stroke {:value "#ddd"}
+                                                 :strokeWidth {:value 1}
+                                                 :x {:value (+ 0.5 (* cell x))}
+                                                 :x2 {:value (+ (* cell (inc x)) 0.5)}
+                                                 :y {:value (+ 0.5 (* cell y))}
+                                                 :y2 {:value (+ (* cell (inc y)) 0.5)}}}
+                                :type "rect"}))
+                     (remove nil?)))
+        (dissoc :autosize))))
 
 #?(:clj
    (do
@@ -511,6 +520,6 @@
                     {:label-key :class
                      :background :#f8f8f8})]
     (clojure.pprint/pprint spec)
-    (vega->svg-file spec "test.svg"))
+    (vega->svg-file spec "pairs.svg"))
 
   )
