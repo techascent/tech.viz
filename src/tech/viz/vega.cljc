@@ -156,7 +156,16 @@
 
 
 (defn histogram
-  "Render a histograph to a vega datastructure"
+  "Render a histograph to a vega datastructure.
+
+  * `values` seq of numbers.
+
+  ```clojure
+  (-> (for [i (range 10)] {:x i :y (rand-int 10000)})
+      ds/->dataset
+      :y
+      (vega/histogram \"foos\"))
+  ```"
   [values label & [{:keys [bin-count gradient-name] :as options
                     :or {gradient-name :gray-yellow-tones}}]]
   (let [n-values (count values)
