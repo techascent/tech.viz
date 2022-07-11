@@ -5,8 +5,7 @@
          :sha "abd480cc382b7ae143f7902ee9d300cdc1a705cc"
          :exclusions [org.graalvm.js/js org.graalvm.js/js-scriptengine]}
         org.graalvm.js/js {:mvn/version "20.3.2"}
-        org.graalvm.js/js-scriptengine {:mvn/version "20.3.2"}
-        }
+        org.graalvm.js/js-scriptengine {:mvn/version "20.3.2"}}
  :aliases
  {:dev
   {:extra-deps {techascent/tech.ml.dataset  {:mvn/version "6.00-beta-16"}

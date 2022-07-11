@@ -223,7 +223,11 @@
 
 
 (defn time-series
-  "Render a time series to a vega datastructure"
+  "Render a time series to a vega datastructure.
+
+  `(get % x-key) and (get % y-key)` are used on each item in the `mapseq-ds` to get the values used in the plot.
+
+  `:label-key` is used to group `mapseq-ds` before plotting, and to choose a color gradient for display."
   [mapseq-ds x-key y-key & [options]]
   (let [label-key (:label-key options)
         gradient-map (label-key->gradient-map
@@ -272,7 +276,9 @@
         (default-legends options))))
 
 (defn stacked-bar-chart
-  "data is a sequence of maps with keys :x :y and :c, sorted by :x
+  "Renders a stacked bar chart vega datastructure.
+
+  data is a sequence of maps with keys :x :y and :c, sorted by :x
   :x is the groups on the x-axis
   :y is the height of the bar-part for that x
   :c is in (0, 1, ...) and corresponds to both the indexes in the color vector and the bottom-up order of the stack categories"
@@ -317,6 +323,15 @@
                              :fill {:scale "color" :field "c"}}}}]))
 
 (defn pairs
+  "Renders a pairs plot vega datastructure.
+
+  see: https://en.wikipedia.org/wiki/Scatter_plot#Scatter_plot_matrices
+
+  `data` is a seqence of maps
+
+  `fields` is a sequence of keys with relevant entries in `data`
+
+  `:label-key` is an option used to specify a gradient color scheme"
   [data fields & [options]]
   (let [width (get options :width 800)
         cell (/ (double width) (count fields))
