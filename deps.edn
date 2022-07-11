@@ -43,7 +43,7 @@
    :exec-fn hf.depstar/jar
    :exec-args {:group-id "techascent"
                :artifact-id "tech.viz"
-               :version "6.00-beta-16-3"
+               :version "6.00-beta-16-4-SNAPSHOT"
                :sync-pom true
                :jar "target/techviz.jar"}}
   :deploy
