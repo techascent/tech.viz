@@ -279,7 +279,7 @@
   "Renders a stacked bar chart vega datastructure.
 
   data is a sequence of maps with keys :x :y and :c, sorted by :x
-  :x is the groups on the x-axis
+  :x is the x-axis location of that data point
   :y is the height of the bar-part for that x
   :c is in (0, 1, ...) and corresponds to both the indexes in the color vector and the bottom-up order of the stack categories"
   [data colors & [options]]
@@ -301,19 +301,22 @@
              :range "height"
              :nice true
              :zero true
-             :domain {:data "table"
-                      :field "y1"}}
+             :domain (or (:y-domain options)
+                         {:data "table"
+                          :field "y1"})}
             {:name "color"
              :type "ordinal"
              :range colors
              :domain {:data "table"
                       :field "c"}}]
-   :axes [{:orient "bottom" :scale "x" :zindex 1
-           :labelAngle -90
-           :labelAlign :right
-           :labelOverlap true
-           :labelBaseline :middle}
-          {:orient "left" :scale "y" :zindex 1}]
+   :axes [(merge {:orient "bottom" :scale "x" :zindex 1
+                  :labelAngle -90
+                  :labelAlign :right
+                  :labelOverlap true
+                  :labelBaseline :middle}
+                 (select-keys options [:x-axis-title]))
+          (merge {:orient "left" :scale "y" :zindex 1}
+                 (select-keys options [:y-axis-title]))]
    :marks [{:type "rect"
             :from {:data "table"}
             :encode {:enter {:x {:scale "x" :field "x"}
