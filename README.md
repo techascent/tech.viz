@@ -148,6 +148,10 @@ And saved as an svg:
 
 ![pairs](images/pairs.svg)
 
+## Deploying
+
+`CLOJARS_USERNAME=[your email] CLOJARS_PASSWORD=$(cat ~/.clojars-token) ./scripts/deploy`
+
 ## License
 
 Copyright © 2022 TechAscent, LLC
